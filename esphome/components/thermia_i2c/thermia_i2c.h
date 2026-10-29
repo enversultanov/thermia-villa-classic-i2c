@@ -1,5 +1,5 @@
 #pragma once
-// I2C-slav mot Thermia Villa-serviceporten. Bara läsning – se __init__.py och docs/registerkarta.md.
+// I2C slave on the Thermia Villa service port. Read-only – see __init__.py and docs/register-map.md.
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
 #include <Wire.h>
@@ -22,8 +22,8 @@ class ThermiaI2C : public Component {
     Wire.begin(sda_, scl_, address_);
     Wire.onReceive(on_receive_);
     Wire.onRequest(on_request_);
-    ESP_LOGI(TAG, "I2C-slav på 0x%02X (SDA GPIO%u, SCL GPIO%u), registerförfrågan %s", address_, sda_, scl_,
-             request_ ? "PÅ" : "AV");
+    ESP_LOGI(TAG, "I2C slave at 0x%02X (SDA GPIO%u, SCL GPIO%u), register requests %s", address_, sda_, scl_,
+             request_ ? "ON" : "OFF");
   }
 
   void loop() override {
@@ -33,7 +33,7 @@ class ThermiaI2C : public Component {
       tail_ = (tail_ + 1) % NBUF;
     }
     if (overflow_) {
-      ESP_LOGW(TAG, "Buffert full – %u ramar tappade", overflow_);
+      ESP_LOGW(TAG, "Buffer full – %u frames dropped", overflow_);
       overflow_ = 0;
     }
     uint32_t now = millis();
@@ -54,8 +54,8 @@ class ThermiaI2C : public Component {
     return n;
   }
   std::string last_frame() const { return last_frame_; }
-  // Alla sedda register som "00:19 01:1 ..." (för HA-sensorn Registerdump)
-  // HA-textsensorer max 255 tecken -> dela upp i intervall (från, till).
+  // All seen registers as "00:19 01:1 ..." (for the Register dump text sensors)
+  // HA text sensors are limited to 255 characters -> split into ranges (from, to).
   std::string dump(uint8_t from = 0, uint8_t to = 127) const {
     std::string out;
     char b[12];
@@ -71,7 +71,7 @@ class ThermiaI2C : public Component {
     uint8_t d[32];
   };
 
-  // Anropas av Wire när pumpen skriver till oss – bara kopiera till ringbufferten.
+  // Called by Wire (interrupt context) when the pump writes to us – only copy into the ring buffer.
   static void on_receive_(int n) {
     ThermiaI2C *s = instance_;
     uint8_t next = (s->head_ + 1) % NBUF;
@@ -87,7 +87,7 @@ class ThermiaI2C : public Component {
     s->head_ = next;
   }
 
-  // Pumpen läser från oss: 0xFF = inget att begära, annars ett registernummer (< 0x80, alltid läsning).
+  // The pump reads from us: 0xFF = nothing to request, otherwise a register number (< 0x80, always a read).
   static void on_request_() {
     ThermiaI2C *s = instance_;
     if (!s->request_) {
@@ -107,17 +107,17 @@ class ThermiaI2C : public Component {
     for (uint8_t i = 0; i < len && p + 3 < sizeof(hex); i++) p += snprintf(hex + p, sizeof(hex) - p, "%02X ", d[i]);
     hex[p] = 0;
     last_frame_ = hex;
-    ESP_LOGV(TAG, "ram %u byte: %s", len, hex);
-    // [reg, låg, hög] (Danfoss/ThermIQ) – även flera tripletter i följd
+    ESP_LOGV(TAG, "frame %u bytes: %s", len, hex);
+    // [reg, low, high] (Danfoss/ThermIQ) – possibly several triplets in a row
     if (len >= 3 && len % 3 == 0) {
       for (uint8_t i = 0; i + 2 < len; i += 3) store_(d[i], (int16_t) (d[i + 1] | (d[i + 2] << 8)));
-    } else if (len == 2) {  // [reg, data] (beskrivet på Värmepumpsforum för Villa Classic)
+    } else if (len == 2) {  // [reg, data] (Villa Classic 901 353)
       store_(d[0], d[1]);
     }
   }
 
   void store_(uint8_t reg, int16_t v) {
-    if (reg >= 0x80) return;  // skrivflagga – ska aldrig komma från pumpen till oss
+    if (reg >= 0x80) return;  // write flag – should never come from the pump to us
     if (!seen_[reg] || regs_[reg] != v) ESP_LOGI(TAG, "r%02X (%3u) = %d", reg, reg, v);
     regs_[reg] = v;
     seen_[reg] = true;
@@ -125,7 +125,7 @@ class ThermiaI2C : public Component {
   }
 
   void log_summary_() {
-    ESP_LOGI(TAG, "Sammanfattning: %u ramar, %u registervärden, %u olika register, %u förfrågningar", frames_, updates_,
+    ESP_LOGI(TAG, "Summary: %u frames, %u register values, %u distinct registers, %u requests", frames_, updates_,
              registers_seen(), requests_);
     for (uint8_t r = 0; r < 128; r++)
       if (seen_[r]) ESP_LOGI(TAG, "  r%02X = %d", r, regs_[r]);

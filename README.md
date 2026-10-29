@@ -1,101 +1,101 @@
-# Thermia Villa Classic – I2C-serviceporten till Home Assistant (ESPHome)
+# Thermia Villa Classic – I2C service port to Home Assistant (ESPHome)
 
-Läs av en äldre **Thermia Villa Classic** bergvärmepump (reglerkort **901 353**) i Home Assistant via pumpens
-4-poliga I2C-serviceport ("INTERFACE") med en ESP8266/ESP32 och ESPHome. Ingen molntjänst, ingen extra logger att köpa.
+Read an older **Thermia Villa Classic** ground-source heat pump (controller board **901 353**) in Home Assistant
+through the pump's 4-pin I2C service port ("INTERFACE"), using an ESP8266/ESP32 and ESPHome. No cloud, no
+commercial logger needed.
 
-*English summary at the bottom.*
-
-> ## ⚠️ Ansvarsfriskrivning – läs först
+> ## ⚠️ Disclaimer – read this first
 >
-> **Allt du gör med det här projektet gör du helt på egen risk.**
+> **Everything you do with this project, you do entirely at your own risk.**
 >
-> - Det här är ett hobbyprojekt. Det är **inte** godkänt, granskat eller supporterat av Thermia, Danfoss eller någon annan tillverkare.
-> - Du ingriper i elektroniken i en värmepump. Fel inkoppling kan **förstöra reglerkortet, pumpen eller din ESP**, ge
->   driftstopp mitt i vintern, frysskador eller vattenskador, och kan påverka **garanti och försäkring**.
-> - Arbete inne i pumpen innebär risk för **elektrisk stöt (230/400 V)**. Bryt strömmen innan du öppnar luckan och
->   anlita behörig elektriker om du är det minsta osäker.
-> - Registerkartan nedan är framtagen genom att jämföra data med displayen på **en** pump. Den kan vara fel eller
->   ofullständig för din pump/programversion.
-> - Koden levereras **i befintligt skick, utan några garantier** (se [LICENSE](LICENSE)). Författarna ansvarar inte för
->   några skador, direkta eller indirekta, som uppstår genom användning av koden, dokumentationen eller råden här.
+> - This is a hobby project. It is **not** approved, reviewed or supported by Thermia, Danfoss or any other manufacturer.
+> - You are tampering with the electronics of a heat pump. Wrong wiring can **destroy the controller board, the pump
+>   or your ESP**, stop your heating in the middle of winter, cause freezing or water damage, and may affect your
+>   **warranty and insurance**.
+> - Working inside the pump involves a risk of **electric shock (230/400 V mains)**. Switch off the power before
+>   opening the cover, and hire a licensed electrician if you are the least bit unsure.
+> - The register map below was worked out by comparing data with the display of **one** pump. It may be wrong or
+>   incomplete for your pump or software version.
+> - The code is provided **"as is", without any warranty** (see [LICENSE](LICENSE)). The authors are not liable
+>   for any damage, direct or indirect, resulting from the use of the code, the documentation or the advice here.
 >
-> Om du inte accepterar detta – använd inte projektet.
+> If you do not accept this – do not use the project.
 
 ## Status
 
-| Del | Status |
+| Part | Status |
 |---|---|
-| Ta emot data från pumpen (bara lyssna) | ✅ Fungerar, ~4 ramar/s, 61 register (r00–r3C) |
-| Registerkarta (temperaturer, inställningar) | 🟡 Delvis bekräftad – se [docs/registerkarta.md](docs/registerkarta.md) |
-| Driftlampor (kompressor, varmvatten …) | 🟡 Delvis (vissa beräknade/troliga) |
-| Skriva inställningar (t.ex. rumsbörvärde) | ❌ Inte implementerat – komponenten skickar aldrig något till pumpen |
+| Receiving data from the pump (listen only) | ✅ Works, ~4 frames/s, 61 registers (r00–r3C) |
+| Register map (temperatures, settings) | 🟡 Partly confirmed – see [docs/register-map.md](docs/register-map.md) |
+| Status LEDs (compressor, hot water …) | 🟡 Partly (some calculated/probable) |
+| Writing settings (e.g. room setpoint) | ❌ Not implemented – the component never sends anything to the pump |
 
-Testat på: Thermia Villa Classic 55, reglerkort 901 353 E (programversion 2.11c), NodeMCU V3.4 (ESP8266), ESPHome 2026.10.
+Tested on: Thermia Villa Classic 55, controller board 901 353 E (software 2.11c), NodeMCU V3.4 (ESP8266), ESPHome 2026.10.
 
-## Hur det fungerar
+## How it works
 
-Pumpens reglerdator är **I2C-master** och skickar själv 2-byte-ramar `[register, värde]` till en slav på
-7-bitarsadress **0x2E**. ESP:n agerar slav (Arduino `Wire` i slavläge) och lagrar värdena; ESPHome-sensorer läser
-ut dem. Temperaturer från givare skickas som **°C + 40** (så att −40 °C ryms i en byte).
+The pump's controller is the **I2C master** and sends 2-byte frames `[register, value]` on its own to a slave at
+7-bit address **0x2E**. The ESP acts as that slave (Arduino `Wire` in slave mode) and stores the values; ESPHome
+template sensors read them out. Temperatures from sensors are sent as **°C + 40** (so that −40 °C fits in a byte).
 
-## Hårdvara
+## Hardware
 
-- ESP8266 (t.ex. NodeMCU) eller **helst ESP32** (bättre I2C-slavstöd).
-- **Nivåomvandlare** BSS138 (4 kanaler, t.ex. Adafruit 757 / Electrokit 41011576) eller, säkrare, en
-  **I2C-isolator** (t.ex. Adafruit ISO1540). Pumpens buss är **5 V** – ESP:ns stift tål officiellt bara 3,3 V.
-- **Egen strömförsörjning till ESP:n** (USB-laddare).
+- ESP8266 (e.g. NodeMCU) or **preferably an ESP32** (better I2C slave support).
+- A **level shifter** BSS138 (4 channels, e.g. Adafruit 757) or, safer, an **I2C isolator** (e.g. Adafruit ISO1540).
+  The pump's bus is **5 V** – the ESP's pins are officially only 3.3 V tolerant.
+- A **separate power supply for the ESP** (USB charger).
 
-### Serviceporten (uppmätt på en 901 353 E)
+### The service port (measured on a 901 353 E)
 
-4 stift, uppifrån: **GND, SCL, SDA, +5V** (mät själv först! Mot GND: +5V ≈ 5,0 V, SDA ≈ 5,0 V i vila,
-SCL 4,6–4,9 V i multimeter eftersom den klockar).
+4 pins, from the top: **GND, SCL, SDA, +5V**. Measure yourself first! Against GND: +5V ≈ 5.0 V, SDA ≈ 5.0 V
+when idle, SCL 4.6–4.9 V on a multimeter because it is clocking.
 
-### Koppling med BSS138-nivåomvandlare
+### Wiring with a BSS138 level shifter
 
-| Omvandlare | Ansluts till |
+| Level shifter | Connect to |
 |---|---|
-| HV | pumpens +5V (endast referens) |
+| HV | pump +5V (reference only) |
 | LV | ESP 3V3 |
-| GND | pumpens GND **och** ESP GND |
+| GND | pump GND **and** ESP GND |
 | HV1 / LV1 | pump SCL / ESP D1 (GPIO5) |
 | HV2 / LV2 | pump SDA / ESP D2 (GPIO4) |
 
-> **Mata ALDRIG ESP:n från pumpens +5V.** Vi provade – pumpens panel slocknade direkt. Porten klarar bara
-> några mA (räcker till referens för nivåomvandlare/isolator), inte en ESP med WiFi (300–400 mA i toppar).
+> **NEVER power the ESP from the pump's +5V pin.** We tried – the pump's front panel went dark immediately. The
+> port only supplies a few mA (enough as a reference for a level shifter/isolator), not an ESP with WiFi
+> (300–400 mA peaks).
 
 ## Installation
 
-1. Kopiera `esphome/` till din ESPHome-konfiguration (eller kör direkt med Docker, se kommentaren överst i
+1. Copy `esphome/` into your ESPHome configuration (or run it directly with Docker, see the comment at the top of
    `esphome/thermia.yaml`).
-2. `cp esphome/secrets.yaml.example esphome/secrets.yaml` och fyll i WiFi m.m.
-3. Programmera första gången via USB, sedan OTA.
-4. Lägg till enheten i Home Assistant (ESPHome-integrationen hittar den automatiskt).
-5. Jämför **Registerdump**-sensorerna med pumpens display innan du litar på något värde.
+2. `cp esphome/secrets.yaml.example esphome/secrets.yaml` and fill in WiFi etc.
+3. Flash the first time over USB, then OTA.
+4. Add the device in Home Assistant (the ESPHome integration discovers it).
+5. Compare the **Register dump** sensors with the pump's display before trusting any value.
 
-Tips: ESP8266 har få API-anslutningar. Glöm inte gamla `esphome logs`-processer/containrar igång – de tar
-platserna och då kan Home Assistant inte ansluta (`EncryptionHelloAPIError`).
+Tip: the ESP8266 only allows a few API connections. Don't leave old `esphome logs` processes/containers running –
+they take the slots and Home Assistant can no longer connect (`EncryptionHelloAPIError`).
 
-## Bidra
+## Contributing
 
-Har du en Villa Classic (eller släkting med samma reglerkort)? Jämför registerdumpen med din display och öppna
-en issue/PR med vad du hittar – särskilt kompressor-, tillsats- och larmbitarna som ännu saknas.
+Do you have a Villa Classic (or a relative with the same controller board)? Compare the register dump with your
+display and open an issue or pull request with what you find – especially the compressor, auxiliary heater and
+alarm bits, which are still missing.
 
-## Källor och tack
+## Sources and thanks
 
-- Värmepumpsforum: trådar om Villa Classic 55 och serviceportens pinout.
-- [omakotikotitalomme.blogspot.com – Danfoss lämpöpumpun salaisuudet](https://omakotikotitalomme.blogspot.com/2015/03/danfoss-lampopumpun-salaisuudet.html) (protokoll för Danfoss/Thermia-familjen).
-- [rainisto/arduino_i2c_orja](https://github.com/rainisto/arduino_i2c_orja) (Arduino-slav, GPL-3.0 – ingen kod kopierad härifrån).
-- [ThermIQ/thermiq_mqtt-ha](https://github.com/ThermIQ/thermiq_mqtt-ha) (registerkarta för nyare reglerkort – gäller **inte** Villa Classic 901 353).
+- Värmepumpsforum (Swedish heat pump forum): threads on the Villa Classic 55 and the service port pinout.
+- [omakotikotitalomme.blogspot.com – Danfoss lämpöpumpun salaisuudet](https://omakotikotitalomme.blogspot.com/2015/03/danfoss-lampopumpun-salaisuudet.html) (protocol of the Danfoss/Thermia family).
+- [rainisto/arduino_i2c_orja](https://github.com/rainisto/arduino_i2c_orja) (Arduino slave, GPL-3.0 – no code copied from it).
+- [ThermIQ/thermiq_mqtt-ha](https://github.com/ThermIQ/thermiq_mqtt-ha) (register map for newer controller boards – does **not** apply to the Villa Classic 901 353).
 
-Thermia är ett varumärke som tillhör sin ägare; projektet har ingen koppling till Thermia.
+Thermia is a trademark of its owner; this project is not affiliated with Thermia.
 
 ---
 
-## English summary
+## Svenska (kort)
 
-ESPHome external component that turns an ESP8266/ESP32 into an I2C slave (address 0x2E) on the 4-pin service
-port of an older **Thermia Villa Classic** ground-source heat pump (controller board 901 353). The controller
-pushes `[register, value]` frames by itself; sensor temperatures are encoded as °C + 40. Partial register map in
-[docs/registerkarta.md](docs/registerkarta.md) (Swedish, tables are easy to follow). Read-only – nothing is ever
-written to the pump. **Use entirely at your own risk**: wrong wiring can destroy the controller or the pump, and
-working inside it involves mains voltage. Never power the ESP from the pump's +5 V pin. No warranty, MIT licence.
+ESPHome-komponent som läser serviceporten (I2C, slav 0x2E) på äldre **Thermia Villa Classic** (reglerkort 901 353)
+och visar värdena i Home Assistant. Bara läsning. **Allt sker helt på egen risk** – fel inkoppling kan förstöra
+reglerkortet eller pumpen, och arbete inne i pumpen innebär risk för elektrisk stöt. Mata aldrig ESP:n från pumpens
++5V. Registerkartan finns i [docs/register-map.md](docs/register-map.md) (displayens svenska menynamn står med).

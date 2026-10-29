@@ -1,15 +1,17 @@
-# Thermia Villa Classic 55 – läser serviceporten (I2C) med NodeMCU V3 (ESP8266). Se README.md och docs/registerkarta.md.
-# Koppling via nivåomvandlare (BSS138) eller I2C-isolator (ISO1540): pump SCL -> D1 (GPIO5), pump SDA -> D2 (GPIO4), GND -> GND.
-# ESP:n ska ha EGEN strömförsörjning (USB-laddare) – mata den ALDRIG från pumpens +5V.
-# Steg 1: bara läsning och loggning av rådata. Komponenten skickar aldrig skrivkommandon till pumpen.
+# Thermia Villa Classic (controller board 901 353) – reads the I2C service port with an ESP8266 (NodeMCU V3).
+# See README.md and docs/register-map.md. USE ENTIRELY AT YOUR OWN RISK.
 #
-# Programmera (USB):  docker run --rm -v "$PWD/esphome":/config --device /dev/ttyUSB0 \
-#                       ghcr.io/esphome/esphome:stable run thermia.yaml --device /dev/ttyUSB0
-# Logg via WiFi:      docker run --rm --network host -v "$PWD/esphome":/config \
-#                       ghcr.io/esphome/esphome:stable logs thermia.yaml --device thermia-i2c.local
+# Wiring via a level shifter (BSS138) or an I2C isolator (ISO1540): pump SCL -> D1 (GPIO5), pump SDA -> D2 (GPIO4), GND -> GND.
+# The ESP must have its OWN power supply (USB charger) – NEVER power it from the pump's +5V pin.
+# Read-only: the component never sends write commands to the pump.
+#
+# Flash (USB):     docker run --rm -v "$PWD/esphome":/config --device /dev/ttyUSB0 \
+#                    ghcr.io/esphome/esphome:stable run thermia.yaml --device /dev/ttyUSB0
+# Logs over WiFi:  docker run --rm --network host -v "$PWD/esphome":/config \
+#                    ghcr.io/esphome/esphome:stable logs thermia.yaml --device thermia-i2c.local
 esphome:
   name: thermia-i2c
-  friendly_name: Bergvärme
+  friendly_name: Heat pump
 
 esp8266:
   board: nodemcuv2
@@ -20,7 +22,7 @@ external_components:
       path: components
 
 logger:
-  level: INFO
+  level: INFO   # DEBUG/VERBOSE logs every received frame
   baud_rate: 115200
 
 api:
@@ -35,7 +37,7 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   ap:
-    ssid: "Thermia-I2C reserv"   # om WiFi inte går att nå: anslut hit och välj nät
+    ssid: "Thermia-I2C fallback"   # if WiFi can't be reached: connect here and pick a network
 
 captive_portal:
 
@@ -44,85 +46,83 @@ thermia_i2c:
   address: 0x2E
   sda: 4   # D2
   scl: 5   # D1
-  request_registers: false   # steg 1: lyssna bara. Sätts till true om pumpen inte skickar något av sig själv.
+  request_registers: false   # just listen. The Villa Classic 901 353 sends its registers by itself.
 
 sensor:
   - platform: wifi_signal
-    name: WiFi-signal
+    name: WiFi signal
     update_interval: 60s
   - platform: template
-    name: I2C ramar
+    name: I2C frames
     accuracy_decimals: 0
     state_class: total_increasing
     lambda: return id(tp).frames();
     update_interval: 30s
   - platform: template
-    name: Register sedda
+    name: Registers seen
     accuracy_decimals: 0
     lambda: return id(tp).registers_seen();
     update_interval: 30s
-  # Registernummer enligt ThermIQ (data/thermia/thermiq_regs.py) – ska verifieras mot pumpens display.
-  # Villa Classic 901353 (egen numrering, jämfört med displayen 2026-10-29): r00 rum börvärde (bekräftat), r03 kurva,
-  # r28/r29 fram/retur (1–2 °C under displayen), r32 fram börvärde. Givartemperaturer kodade som värde + 40:
-  # r30 ute (bekräftat 14 och 10 °C), r2D köldbärare fr/in, r2B köldbärare till/ut (en bild: 10/9). r16 = konstant 14, inte ute.
-  - {platform: template, name: Utetemperatur,          unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x30); return std::isnan(v) ? v : v - 40;"}
-  - {platform: template, name: Rum börvärde,           unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x00);"}
-  - {platform: template, name: Kurva,                  state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x03);"}
-  # Fram/retur/köldbärare/fram börvärde: jämförda med displayen, ej ändringstestade.
-  - {platform: template, name: Framledning,            unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x28);"}
-  - {platform: template, name: Returledning,           unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x29);"}
-  - {platform: template, name: Köldbärare ut,          unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x2B); return std::isnan(v) ? v : v - 40;"}
-  - {platform: template, name: Köldbärare in,          unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x2D); return std::isnan(v) ? v : v - 40;"}
-  - {platform: template, name: Framledning börvärde,   unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x32);"}
-  - {platform: template, name: Integral, unit_of_measurement: "°min", state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x11); return std::isnan(v) ? v : (float) (int8_t) (uint8_t) v;"}
-  # Troliga (värde = display 2026-10-29, ej ändringstestade):
-  - {platform: template, name: Kurva min, unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x06);"}
-  - {platform: template, name: Kurva max, unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x07);"}
-  - {platform: template, name: Max retur, unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x0B);"}
-  - {platform: template, name: Givare r2C (okänd), unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x2C); return std::isnan(v) ? v : v - 40;"}
+  # Register map: docs/register-map.md (one pump, compared with its display – verify against YOUR display).
+  # Sensor temperatures are encoded as value + 40 (so that -40 °C fits in one byte).
+  - {platform: template, name: Outdoor temperature,    unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x30); return std::isnan(v) ? v : v - 40;"}
+  - {platform: template, name: Room setpoint,          unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x00);"}
+  - {platform: template, name: Heating curve,          state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x03);"}
+  # Supply/return/brine/supply setpoint: match the display, not yet change-tested.
+  - {platform: template, name: Supply line,            unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x28);"}
+  - {platform: template, name: Return line,            unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x29);"}
+  - {platform: template, name: Brine out,              unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x2B); return std::isnan(v) ? v : v - 40;"}
+  - {platform: template, name: Brine in,               unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x2D); return std::isnan(v) ? v : v - 40;"}
+  - {platform: template, name: Supply line setpoint,   unit_of_measurement: "°C", device_class: temperature, state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x32);"}
+  - {platform: template, name: Integral,               unit_of_measurement: "°min", state_class: measurement, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x11); return std::isnan(v) ? v : (float) (int8_t) (uint8_t) v;"}
+  # Probable (value equals the display, not change-tested):
+  - {platform: template, name: Curve min,              unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x06);"}
+  - {platform: template, name: Curve max,              unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x07);"}
+  - {platform: template, name: Max return,             unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "return id(tp).value(0x0B);"}
+  - {platform: template, name: Sensor r2C (unknown),   unit_of_measurement: "°C", device_class: temperature, state_class: measurement, entity_category: diagnostic, accuracy_decimals: 0, update_interval: 30s, lambda: "float v = id(tp).value(0x2C); return std::isnan(v) ? v : v - 40;"}
 
 binary_sensor:
-  # Panelens lampor uppifrån (etiketterna på pumpen). Villa Classic 901353 – se docs/registerkarta.md.
+  # The front panel LEDs, top to bottom.
   - platform: template
-    name: Spänningstillförsel   # pumpen skickar ramar = har ström
+    name: Power supply          # the pump is sending frames = it has power
     device_class: power
     lambda: |-
       static uint32_t last = 0, t = 0;
       if (id(tp).frames() != last) { last = id(tp).frames(); t = millis(); }
       return last > 0 && millis() - t < 15000;
   - platform: template
-    name: Värmepump             # beräknad: köldbärare fr − till >= 2 °C betyder att kompressorn tar värme ur borrhålet
+    name: Heat pump (compressor)   # calculated: brine in − out >= 2 °C means the compressor is extracting heat
     device_class: running
     lambda: |-
       if (!id(tp).has(0x2D) || !id(tp).has(0x2B)) return {};
       return id(tp).value(0x2D) - id(tp).value(0x2B) >= 2;
-  - {platform: template, name: Varmvattenproduktion, device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x10);"}   # trolig (fram 54 °C samtidigt)
-  - {platform: template, name: Värmebärarpump,       device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x20);"}   # trolig (alltid på, som lampan)
-  - {platform: template, name: Tillsatsvärme,        device_class: heat,    lambda: "return {};"}      # register ej hittat än -> okänd
-  - {platform: template, name: Larmindikering,       device_class: problem, lambda: "return {};"}      # register ej hittat än -> okänd
+  - {platform: template, name: Hot water production, device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x10);"}   # probable (supply line ~54 °C at the same time)
+  - {platform: template, name: Circulation pump,     device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x20);"}   # probable (always on, like the LED)
+  - {platform: template, name: Auxiliary heater,     device_class: heat,    lambda: "return {};"}      # register not found yet -> unknown
+  - {platform: template, name: Alarm,                device_class: problem, lambda: "return {};"}      # register not found yet -> unknown
 
 button:
   - platform: restart
-    name: Starta om
+    name: Restart
     entity_category: config
 
 text_sensor:
   - platform: template
-    name: Registerdump
+    name: Register dump
     entity_category: diagnostic
     lambda: return id(tp).dump(0x00, 0x1F);
     update_interval: 15s
   - platform: template
-    name: Registerdump 2
+    name: Register dump 2
     entity_category: diagnostic
     lambda: return id(tp).dump(0x20, 0x7F);
     update_interval: 15s
   - platform: wifi_info
     bssid:
-      name: Ansluten åtkomstpunkt (BSSID)
+      name: Connected access point (BSSID)
       entity_category: diagnostic
   - platform: template
-    name: Senaste I2C-ram
+    name: Last I2C frame
     entity_category: diagnostic
     lambda: return id(tp).last_frame();
     update_interval: 30s
