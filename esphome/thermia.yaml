@@ -97,7 +97,7 @@ binary_sensor:
       if (!id(tp).has(0x2D) || !id(tp).has(0x2B)) return {};
       return id(tp).value(0x2D) - id(tp).value(0x2B) >= 2;
   - {platform: template, name: Hot water production, device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x10);"}   # probable (supply line ~54 °C at the same time)
-  - {platform: template, name: Circulation pump,     device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x20);"}   # probable (always on, like the LED)
+  - {platform: template, name: Circulation pump,     device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x20);"}   # confirmed (off in the non-auto modes, on with its LED)
   - {platform: template, name: Auxiliary heater,     device_class: heat,    lambda: "return {};"}      # register not found yet -> unknown
   - {platform: template, name: Alarm,                device_class: problem, lambda: "return {};"}      # register not found yet -> unknown
 
@@ -107,6 +107,14 @@ button:
     entity_category: config
 
 text_sensor:
+  - platform: template
+    name: Operating mode   # r01, confirmed 2026-10-29 (1–4 changed on the display; 0 = off assumed)
+    lambda: |-
+      static const char *const m[] = {"Off","Auto","Hot water only","Heat pump only","Aux heater only"};
+      if (!id(tp).has(0x01)) return {};
+      int v = (int) id(tp).value(0x01);
+      return v >= 0 && v <= 4 ? std::string(m[v]) : "? (" + to_string(v) + ")";
+    update_interval: 15s
   - platform: template
     name: Register dump
     entity_category: diagnostic
