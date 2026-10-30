@@ -90,13 +90,8 @@ binary_sensor:
       static uint32_t last = 0, t = 0;
       if (id(tp).frames() != last) { last = id(tp).frames(); t = millis(); }
       return last > 0 && millis() - t < 15000;
-  - platform: template
-    name: Heat pump (compressor)   # calculated: brine in − out >= 2 °C means the compressor is extracting heat
-    device_class: running
-    lambda: |-
-      if (!id(tp).has(0x2D) || !id(tp).has(0x2B)) return {};
-      return id(tp).value(0x2D) - id(tp).value(0x2B) >= 2;
-  - {platform: template, name: Hot water production, device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x10);"}   # probable (supply line ~54 °C at the same time)
+  - {platform: template, name: "Heat pump (compressor)", device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x02);"}   # r33 bit1, confirmed: 12 starts overnight, house draws +1.5 kW while set
+  - {platform: template, name: Hot water production, device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x10);"}   # confirmed (7 hot water runs overnight, supply line 54–55 °C each time)
   - {platform: template, name: Circulation pump,     device_class: running, lambda: "if (!id(tp).has(0x33)) return {}; return id(tp).flag(0x33, 0x20);"}   # confirmed (off in the non-auto modes, on with its LED)
   - {platform: template, name: Auxiliary heater,     device_class: heat,    lambda: "return {};"}      # register not found yet -> unknown
   - {platform: template, name: Alarm,                device_class: problem, lambda: "return {};"}      # register not found yet -> unknown
