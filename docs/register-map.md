@@ -17,7 +17,7 @@ The display text (Swedish) is given so you can find the value in the pump's menu
 | 0x06 | Curve min (°C) | Kurva min | raw | Probable (= display 10) |
 | 0x07 | Curve max (°C) | Kurva max | raw | Probable (= display 55) |
 | 0x0B | Max return (°C) | Returl (48) | raw | Probable (= value in brackets) |
-| 0x11 | Integral (°min)? | Integral | int8 | Doubtful (= display +7 once, but constant all night) |
+| 0x11 | Integral **setting** (°min) | Integral (in the curve menu) | int8 | Probable: = display +7 and constant; the running integral (−660 in a test) is not in 0x00–0x3C |
 | 0x28 | Supply line (°C) | Framl | raw | Probable (1–2 °C below the display) |
 | 0x29 | Return line (°C) | Returl | raw | Probable (1–2 °C below the display) |
 | 0x2B | Brine out, to borehole (°C)? | Kb till | **value − 40** | Doubtful (= display 9 once, but in − out ≈ 0 while the compressor runs) |
@@ -27,7 +27,7 @@ The display text (Swedish) is given so you can find the value in the pump's menu
 | 0x20 | Indoor/room sensor? (°C) | – | value − 40 | Guess (16–20 °C, slowly varying) |
 | 0x31 | Room setpoint, copy (°C) | – | raw | Probable (follows 0x00 when the setpoint is changed) |
 | 0x32 | Supply line setpoint (°C) | Framl (21) | raw | **Confirmed** (25 → 40 → 25 when the room setpoint was changed 19 → 24 → 19) |
-| 0x33 | Status bits | – | bit 5 (0x20) = circulation pump (**confirmed**: off in the non-auto modes, on with its LED), bit 1 (0x02) = **compressor** (12 starts overnight, the house draws +1.5 kW while set), bit 4 (0x10) = **hot water production** (7 runs, supply line 54–55 °C each time), bit 5 (0x20) = circulation pump (off in the non-auto modes) | **Confirmed** |
+| 0x33 | Status bits | – | bit 7 (0x80) = **auxiliary heater** (confirmed: +6 kW, together with 0x2F = 1), bit 5 (0x20) = circulation pump (**confirmed**: off in the non-auto modes, on with its LED), bit 1 (0x02) = **compressor** (12 starts overnight, the house draws +1.5 kW while set), bit 4 (0x10) = **hot water production** (7 runs, supply line 54–55 °C each time) | **Confirmed** |
 | 0x38 | Clock, seconds | – | raw | Confirmed |
 | 0x39 | Clock, minutes | – | raw | Confirmed |
 | 0x3A, 0x3C | Counters (+1 per minute) | – | | Meaning unknown |
@@ -42,7 +42,7 @@ changes). r0C = 44 is not the current in amperes.
 
 ## Missing
 
-Auxiliary heater, alarm, hot water temperature (the Villa Classic controls hot water with
+Alarm, hot water temperature (the Villa Classic controls hot water with
 a pressostat), run-time counters. Compressor electrical power measured at ≈ 1.5 kW (Villa Classic 55, outdoor 5–13 °C).
 
 ## Raw data
